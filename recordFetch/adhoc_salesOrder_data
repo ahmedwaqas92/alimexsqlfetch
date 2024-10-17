@@ -1,0 +1,85 @@
+import sys
+sys.path.append("../")
+from libraries.libraries import *
+from connection.connection import dbConnection
+
+sales_order_data = []
+work_order_SO = []
+unfinished_sales_order = []
+results = []
+
+class salesOrderFetch:
+    def __init__(self):
+        pass
+    def fetchingTables():
+        try:
+            connection = dbConnection.connect()
+            cursor = connection.cursor()
+            cursor.execute("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'")
+            tables = cursor.fetchall()
+            for table in tables:
+                print(table.TABLE_NAME)
+        except pyodbc.Error as err:
+            print(f"Error: {err}")
+        finally:
+            connection.close()        
+    def salesOrder():
+        try:
+            connection = dbConnection.connect()
+            cursor = connection.cursor()
+            cursor.execute("select * from SO") 
+            columns = []
+            
+            for column in cursor.description:
+                columns.append(column[0])
+            
+            table = cursor.fetchall()
+            
+            for row in table:
+                row_dict = dict(zip(columns, row))
+                for month in range(1,13):
+                    if row_dict.get('DocDate') and row_dict.get('DocDate').year == datetime.now().year and row_dict.get('DocDate').month == month:
+                        sales_order_data.append(row_dict["DocNo"])
+                        
+            
+            cursor.execute("select * from Freely_WorkOrderDTL")
+
+            new_columns = [column[0] for column in cursor.description]
+            WO_table = cursor.fetchall()
+
+            for item in WO_table:
+                item_dict = dict(zip(new_columns, item))
+                work_order_SO.append(item_dict["FromDocNo"])
+                
+            unfinished_sales_order = [item for item in sales_order_data if item not in work_order_SO]
+            
+            for item in unfinished_sales_order:
+                cursor.execute("select * from SO where DocNo in (?)", (item))
+                rows = cursor.fetchall()
+                columns = [column[0] for column in cursor.description]
+                
+                for row in rows:
+                    row_dict = dict(zip(columns, row))
+                    results.append(row_dict)
+            
+            # Define the CSV file name
+            csv_file = 'unfinished_sales_orders.csv'
+            
+            # Write the results to a CSV file
+            with open(csv_file, mode='w', newline='') as file:
+                writer = csv.DictWriter(file, fieldnames=columns)
+                writer.writeheader()
+                writer.writerows(results)
+            
+            print(f"Data exported to {csv_file} successfully.")
+                        
+        except pyodbc.Error as err:
+            print(f"Error: {err}")
+
+        finally:
+            connection.close()
+            
+            
+            
+salesOrderFetch.salesOrder()
+# print(sales_order_data)
